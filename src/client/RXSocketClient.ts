@@ -6,6 +6,7 @@ import { RXClientSocketEvent } from './RXClientSocketEvent';
 import { take, timeout } from 'rxjs/operators';
 import { ReadyState } from '../ReadyState';
 import WebSocketType = require('ws');
+import { RXSocketClientOptions } from "./RXSocketClientOptions";
 
 declare const window: any;
 declare type ResponseHandler = [number, (message: RXSocketMessage<any, any>) => void, (message: RXSocketMessage<any, any>) => void]
@@ -31,6 +32,12 @@ export class RXSocketClient implements RXSocket {
     private responseTimeout = 0;
     private url: string | undefined;
 
+    public get raw() {
+        if (!this.socket) {
+            throw new Error("Socket is not open");
+        }
+        return this.socket!!;
+    }
     public options: { [key: string]: any } = {};
     private cleanupTimer?: number;
 
@@ -42,7 +49,7 @@ export class RXSocketClient implements RXSocket {
         return 0;
     }
 
-    constructor(options: { socket?: WebSocketType, url?: string, reconnect?: number, responseTimeout?: number, queueTimeout?: number, queueLength?: number }) {
+    constructor(options: RXSocketClientOptions) {
         if (options.socket) {
             this.socket = options.socket;
             this.bind();
