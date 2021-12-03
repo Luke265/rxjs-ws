@@ -13,7 +13,7 @@
     "do-publish": "tsc && cp package.json dist/src && cp .npmrc dist/src && cd dist/src && npm publish"
   },
   "dependencies": {
-    "rxjs": ">=6.0.0",
+    "rxjs": ">=6",
     "tslib": ">=1.0.0",
     "ws": ">=6"
   },

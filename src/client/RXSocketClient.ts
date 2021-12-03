@@ -1,9 +1,9 @@
 import { RXSocket } from "../RXSocket";
-import { Subject } from "rxjs";
+import { firstValueFrom, Subject } from "rxjs";
 import { RXSocketMessage } from "../RXSocketMessage";
 import { EventName, RXSocketEvent } from '../RXSocketEvent';
 import { RXClientSocketEvent } from './RXClientSocketEvent';
-import { take, timeout } from 'rxjs/operators';
+import { timeout } from 'rxjs/operators';
 import { ReadyState } from '../ReadyState';
 import WebSocketType = require('ws');
 import { RXSocketClientOptions } from "./RXSocketClientOptions";
@@ -69,8 +69,8 @@ export class RXSocketClient implements RXSocket {
     async sendRaw(data: any) {
         if (this.readyState !== ReadyState.OPEN) {
             if (this.queueTimeout > 0) {
-                await this.open$.pipe(timeout(this.queueTimeout), take(1)).toPromise();
-                if (this.readyState === ReadyState.OPEN) {
+                await firstValueFrom(this.open$.pipe(timeout(this.queueTimeout)));
+                if ((this.readyState as ReadyState) === ReadyState.OPEN) {
                     this.sendRaw(data);
                     return;
                 }
@@ -126,9 +126,7 @@ export class RXSocketClient implements RXSocket {
     }
 
     open() {
-        if (this.socket) {
-            this.reconnect = 0;
-        } else if (this.url) {
+        if (this.url) {
             if (typeof window !== 'undefined' && (window as any).WebSocket) {
                 this.socket = new window.WebSocket(this.url);
             } else {
@@ -137,7 +135,7 @@ export class RXSocketClient implements RXSocket {
             }
         }
         this.bind();
-        return this.open$.pipe(timeout(this.responseTimeout), take(1)).toPromise();
+        return firstValueFrom(this.open$.pipe(timeout(this.queueTimeout)));
     }
 
     private setupCleanup() {
@@ -166,7 +164,7 @@ export class RXSocketClient implements RXSocket {
             clearInterval(this.cleanupTimer!!)
             this.close$.next(event);
             this.rejectAll('closed');
-            if (event.code !== 1000 && this.options.reconnect) {
+            if (event.code !== 1000 && this.reconnect) {
                 this.doReconnect();
             }
         };

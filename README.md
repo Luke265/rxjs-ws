@@ -37,7 +37,7 @@ helloEvent.subscribe(async (message) => {
 });
 ```
 
-Subscribtion example:
+Subscription example:
 ```ts
 const client = new RXSocketClient({ url: 'ws://localhost:3000' });
 const pingEvent = client.event('ping');
