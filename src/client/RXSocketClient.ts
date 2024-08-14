@@ -144,7 +144,7 @@ export class RXSocketClient implements RXSocket {
                 const now = Date.now();
                 for (const id in this.response) {
                     const handler = this.response[id];
-                    if (handler && now - handler[0] >= this.queueTimeout) {
+                    if (handler && now - handler[0] >= this.responseTimeout) {
                         this.response[id] = undefined;
                     }
                 }
