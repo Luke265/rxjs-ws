@@ -10,9 +10,10 @@ import { RXSocketClientOptions } from "./RXSocketClientOptions";
 
 declare const window: any;
 declare type ResponseHandler = [
-    number,
-    (message: RXSocketMessage<any, any>) => void,
-    (message: RXSocketMessage<any, any>) => void
+    date: number,
+    timeout: number,
+    resolve: (message: RXSocketMessage<any, any>) => void,
+    reject: (reason: unknown) => void
 ];
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -27,7 +28,7 @@ export class RXSocketClient implements RXSocket {
     readonly events: { [name: string]: RXSocketEvent<any> } = {};
 
     private messageId: number = 1;
-    private response: { [id: number]: ResponseHandler | undefined } = {};
+    private response: (ResponseHandler | undefined)[] = [];
     private socket!: WebSocketType;
     private queueLength = 100;
     private reconnect = 0;
@@ -58,10 +59,11 @@ export class RXSocketClient implements RXSocket {
             this.bind();
         }
         this.url = options.url;
-        this.reconnect = options.reconnect || 5_000;
-        this.responseTimeout = options.responseTimeout || 10_000;
-        this.queueTimeout = options.queueTimeout || this.responseTimeout;
-        this.queueLength = options.queueLength || this.queueLength;
+        this.reconnect = options.reconnect ?? 5_000;
+        this.responseTimeout = options.responseTimeout ?? 10_000;
+        this.queueTimeout = options.queueTimeout ?? this.responseTimeout;
+        this.queueLength = options.queueLength ?? this.queueLength;
+        this.response = new Array(this.queueLength);
         this.setupCleanup();
     }
 
@@ -83,15 +85,19 @@ export class RXSocketClient implements RXSocket {
         this.socket.send(data);
     }
 
-    sendForResult<I, O>(event: EventName, data: any, id = this.messageId++) {
+    sendForResult<I, O>(event: EventName, data: any, options?: { timeout?: number }) {
+        let id = this.messageId++;
         if (id === this.queueLength) {
             id = this.messageId = 0;
         }
         if (this.response[id]) {
-            throw new Error("Queue full");
+            id = this.response.findIndex((r) => !!r);
+            if (id === -1) {
+                throw new Error("Queue full");
+            }
         }
         return new Promise<RXSocketMessage<I, O>>((resolve, reject) => {
-            this.response[id] = [Date.now(), resolve, reject];
+            this.response[id] = [Date.now(), options?.timeout ?? this.responseTimeout, resolve, reject];
             this.sendRaw(this.serialize(id, event, data));
         });
     }
@@ -142,10 +148,11 @@ export class RXSocketClient implements RXSocket {
         this.cleanupTimer = Number(
             setInterval(() => {
                 const now = Date.now();
-                for (const id in this.response) {
-                    const handler = this.response[id];
-                    if (handler && now - handler[0] >= this.responseTimeout) {
-                        this.response[id] = undefined;
+                for (let i = 0; i < this.response.length; i++) {
+                    const handler = this.response[i];
+                    if (handler && now - handler[0] >= handler[1]) {
+                        handler[3](new Error("Response timeout"));
+                        this.response[i] = undefined;
                     }
                 }
             }, 1000)
@@ -204,8 +211,8 @@ export class RXSocketClient implements RXSocket {
             if (event.name === RXSocketClient.EVENT_RESPONSE) {
                 const callback = this.response[id];
                 if (callback) {
-                    callback[1](message);
                     this.response[id] = undefined;
+                    callback[2](message);
                 }
             } else {
                 event.next(message);
@@ -232,9 +239,9 @@ export class RXSocketClient implements RXSocket {
     private rejectAll(error: any) {
         for (const callbacks of Object.values(this.response)) {
             if (callbacks) {
-                callbacks[1](error);
+                callbacks[2](error);
             }
         }
-        this.response = {};
+        this.response = new Array(this.queueLength);
     }
 }
