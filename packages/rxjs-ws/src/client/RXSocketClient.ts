@@ -1,4 +1,4 @@
-import { RXSocket } from '../RXSocket.js';
+import { RXSocket, SendForResultOptions } from '../RXSocket.js';
 import { firstValueFrom, Subject } from 'rxjs';
 import { RXSocketMessage } from '../RXSocketMessage.js';
 import { EventName, RXSocketEvent } from '../RXSocketEvent.js';
@@ -7,6 +7,7 @@ import { timeout } from 'rxjs/operators';
 import { ReadyState } from '../ReadyState.js';
 import type WebSocketType from 'ws';
 import { RXSocketClientOptions } from './RXSocketClientOptions.js';
+import { CloseEvent } from 'ws';
 
 declare namespace globalThis {
   const WebSocket: { new (url: string): WebSocketType } | undefined;
@@ -27,16 +28,18 @@ export class RXSocketClient implements RXSocket {
   static EVENT_RESPONSE = -1;
 
   readonly message$: Subject<RXSocketMessage<any>> = new Subject();
-  readonly close$: Subject<any> = new Subject();
+  readonly close$: Subject<CloseEvent> = new Subject();
   readonly error$: Subject<any> = new Subject();
   readonly open$: Subject<any> = new Subject();
-  readonly events: { [name: string]: RXSocketEvent<any> } = {};
+  readonly events: { [name: EventName]: RXSocketEvent<any> } = {};
 
+  // 0 - is global broadcast id, so we start from 1
   private messageId: number = 1;
-  private response: (ResponseHandler | undefined)[] = [];
+  private readonly response = new Map<number, ResponseHandler | undefined>();
   private socket!: WebSocketType;
   private queueLength = 100;
-  private reconnect = 0;
+  private reconnect = false;
+  private reconnectDelay = 0;
   private queueTimeout = 0;
   private responseTimeout = 0;
   private url: string | undefined;
@@ -49,7 +52,7 @@ export class RXSocketClient implements RXSocket {
     return this.socket!!;
   }
   public options: { [key: string]: any } = {};
-  private cleanupTimer?: number;
+  private cleanupTimer: number | null = null;
 
   get readyState() {
     if (this.socket) {
@@ -64,11 +67,13 @@ export class RXSocketClient implements RXSocket {
       this.bind();
     }
     this.url = options.url;
-    this.reconnect = options.reconnect ?? 5_000;
+    this.reconnectDelay = options.reconnectDelay ?? 5_000;
+    this.reconnect = this.reconnectDelay > 0;
     this.responseTimeout = options.responseTimeout ?? 10_000;
     this.queueTimeout = options.queueTimeout ?? this.responseTimeout;
     this.queueLength = options.queueLength ?? this.queueLength;
-    this.response = new Array(this.queueLength);
+    // allocate immediately, used only internally
+    this.event(RXSocketClient.EVENT_RESPONSE);
     this.setupCleanup();
   }
 
@@ -93,34 +98,26 @@ export class RXSocketClient implements RXSocket {
   sendForResult<I, O>(
     event: EventName,
     data: I,
-    options?: { timeout?: number }
-  ) {
-    let id = this.messageId++;
-    if (id === this.queueLength) {
-      id = this.messageId = 0;
-    }
-    if (this.response[id]) {
-      id = this.response.findIndex((r) => !!r);
-      if (id === -1) {
-        throw new Error('Queue full');
+    options?: SendForResultOptions,
+    id = this.messageId++
+  ): Promise<RXSocketMessage<O, unknown>> {
+    return new Promise<RXSocketMessage<O, unknown>>((resolve, reject) => {
+      if (this.response.has(id)) {
+        reject(new Error('Callback already set'));
+        return;
       }
-    }
-    return new Promise<RXSocketMessage<I, O>>((resolve, reject) => {
-      this.response[id] = [
+      this.response.set(id, [
         Date.now(),
         options?.timeout ?? this.responseTimeout,
         resolve,
         reject,
-      ];
+      ]);
       this.sendRaw(this.serialize(id, event, data));
     });
   }
 
-  event<I = any, O = any>(name: string): RXSocketEvent<I, O> {
-    if (this.events[name]) {
-      return this.events[name]!;
-    }
-    return (this.events[name] = new RXClientSocketEvent(this, name));
+  event<I = any, O = any>(name: EventName): RXSocketEvent<I, O> {
+    return (this.events[name] ??= new RXClientSocketEvent(this, name));
   }
 
   protected serialize(
@@ -147,13 +144,13 @@ export class RXSocketClient implements RXSocket {
     return JSON.stringify([id, event, data]);
   }
 
-  protected deserialize(data: any) {
+  protected deserialize(data: any): [number, string, unknown] {
     return JSON.parse(data);
   }
 
   async open() {
     if (this.url) {
-      if ('WebSocket' in globalThis && globalThis['WebSocket']) {
+      if ('window' in globalThis && globalThis['WebSocket']) {
         this.socket = new globalThis['WebSocket'](this.url);
       } else {
         const { WebSocket } = await import('ws');
@@ -164,16 +161,32 @@ export class RXSocketClient implements RXSocket {
     return firstValueFrom(this.open$.pipe(timeout(this.queueTimeout)));
   }
 
+  close(code = 1000, data?: string | Buffer) {
+    if (!this.socket || this.readyState === ReadyState.CLOSED) {
+      return;
+    }
+    this.reconnect = false;
+    const p = firstValueFrom(this.close$);
+    this.socket?.close(code, data);
+    return p;
+  }
+
+  async destroy() {
+    await this.close();
+    for (const name in this.events) {
+      (this.events[name] as RXClientSocketEvent<unknown>).complete();
+    }
+  }
+
   private setupCleanup() {
     clearInterval(this.cleanupTimer!!);
     this.cleanupTimer = Number(
       setInterval(() => {
         const now = Date.now();
-        for (let i = 0; i < this.response.length; i++) {
-          const handler = this.response[i];
+        for (const [id, handler] of this.response) {
           if (handler && now - handler[0] >= handler[1]) {
             handler[3](new Error('Response timeout'));
-            this.response[i] = undefined;
+            this.response.delete(id);
           }
         }
       }, 1000)
@@ -181,6 +194,7 @@ export class RXSocketClient implements RXSocket {
   }
 
   private bind() {
+    this.reconnect = this.reconnectDelay > 0;
     this.socket.onopen = (event) => {
       this.setupCleanup();
       this.open$.next(event);
@@ -190,12 +204,15 @@ export class RXSocketClient implements RXSocket {
       this.error$.next(event);
     };
     this.socket.onclose = (event) => {
-      clearInterval(this.cleanupTimer!!);
+      clearInterval(this.cleanupTimer ?? undefined);
+      this.cleanupTimer = null;
       this.close$.next(event);
       this.rejectAll('closed');
       if (event.code !== 1000 && this.reconnect) {
         this.doReconnect();
-      } else if (this.reconnectTimer) {
+        return;
+      }
+      if (this.reconnectTimer) {
         clearTimeout(this.reconnectTimer);
       }
     };
@@ -220,25 +237,46 @@ export class RXSocketClient implements RXSocket {
         return;
       }
       const [id, eventName, data] = this.deserialize(socketEvent.data);
-      const event = this.event(eventName);
+      const event = this.events[eventName];
+      if (!event) {
+        return;
+      }
+      let sent = false;
       const message: RXSocketMessage<any> = {
         id,
         event,
         socket: this,
         data,
-        send: (data: any) =>
-          this.sendRaw(this.serialize(id, RXSocketClient.EVENT_RESPONSE, data)),
-        sendForResult: (data: any) =>
-          this.sendForResult(RXSocketClient.EVENT_RESPONSE, data, id),
+        send: (data: any) => {
+          if (sent) {
+            throw new Error('Already sent');
+          }
+          sent = true;
+          return this.sendRaw(
+            this.serialize(id, RXSocketClient.EVENT_RESPONSE, data)
+          );
+        },
+        sendForResult: (data: any, options?: SendForResultOptions) => {
+          if (sent) {
+            throw new Error('Already sent');
+          }
+          sent = true;
+          return this.sendForResult(
+            RXSocketClient.EVENT_RESPONSE,
+            data,
+            options,
+            id
+          );
+        },
       };
       if (event.name === RXSocketClient.EVENT_RESPONSE) {
-        const callback = this.response[id];
+        const callback = this.response.get(id);
         if (callback) {
-          this.response[id] = undefined;
+          this.response.delete(id);
           callback[2](message);
         }
       } else {
-        event.next(message);
+        (event as RXClientSocketEvent<unknown>).next(message);
         this.message$.next(message);
       }
     };
@@ -255,16 +293,16 @@ export class RXSocketClient implements RXSocket {
         this.open().catch(() => {
           /** ignore */
         }),
-      this.reconnect
+      this.reconnectDelay
     );
   }
 
   private rejectAll(error: any) {
-    for (const callbacks of Object.values(this.response)) {
+    for (const [_, callbacks] of this.response) {
       if (callbacks) {
-        callbacks[2](error);
+        callbacks[3](error);
       }
     }
-    this.response = new Array(this.queueLength);
+    this.response.clear();
   }
 }

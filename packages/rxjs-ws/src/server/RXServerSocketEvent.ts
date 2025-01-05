@@ -1,20 +1,12 @@
-import { Subject } from 'rxjs';
+import { Observable } from 'rxjs';
 import { RXSocket } from '../RXSocket.js';
-import { RXSocketEventBase } from '../RXSocketEventBase.js';
+import { RXSocketEvent } from '../RXSocketEvent.js';
+import { RXSocketMessage } from '../RXSocketMessage.js';
 
-export class RXServerSocketEvent<I = any, O = any> extends RXSocketEventBase<
-  I,
-  O
-> {
-  readonly remoteSubscribe$: Subject<RXSocket> = new Subject();
-  readonly remoteSubscribers: Set<RXSocket> = new Set();
-
-  toggleRemoteSub(socket: RXSocket, bool: boolean) {
-    if (bool) {
-      this.remoteSubscribe$.next(socket);
-      this.remoteSubscribers.add(socket);
-    } else {
-      this.remoteSubscribers.delete(socket);
-    }
-  }
+export interface RXServerSocketEvent<I = any, O = any>
+  extends RXSocketEvent<I, O>,
+    Observable<RXSocketMessage<I, O>> {
+  readonly remoteSubscribe$: Observable<RXSocketMessage<any>>;
+  readonly remoteSubscribers: ReadonlySet<RXSocket>;
+  toggleRemoteSub(socket: RXSocket, bool: boolean): void;
 }
