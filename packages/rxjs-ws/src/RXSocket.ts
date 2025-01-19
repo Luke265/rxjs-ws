@@ -1,28 +1,27 @@
 import { Observable } from 'rxjs';
-import { RXSocketMessage } from './RXSocketMessage.js';
-import { EventName, RXSocketEvent } from './RXSocketEvent.js';
-import { CloseEvent } from 'ws';
+import { RXMessage } from './RXSocketMessage.js';
+import { EventName, RXEvent } from './RXSocketEvent.js';
+import { CloseEvent, WebSocket } from 'ws';
 
 export interface SendForResultOptions {
   timeout?: number;
 }
 
-export interface RXSocketSender {
+export interface RXSocket {
+  readonly raw: WebSocket;
+  readonly message$: Observable<RXMessage<any>>;
+  readonly close$: Observable<CloseEvent>;
+  readonly error$: Observable<Error>;
   readonly open$: Observable<any>;
   readonly readyState: number;
-  event<I, O = any>(name: EventName): RXSocketEvent<I, O>;
+  destroy(): Promise<void>;
+  close(code?: number, data?: string | Buffer): void;
+  event<I, O = any>(name: EventName | RXEvent<I, O>): RXEvent<I, O>;
   sendRaw(data: any): Promise<void>;
   send(event: EventName, data: any): Promise<void>;
   sendForResult<I, O>(
     event: EventName,
     data: any,
     options?: SendForResultOptions
-  ): Promise<RXSocketMessage<I, O>>;
-}
-
-export interface RXSocket extends RXSocketSender {
-  readonly options: { [key: string]: any };
-  readonly message$: Observable<RXSocketMessage<any>>;
-  readonly close$: Observable<CloseEvent>;
-  readonly error$: Observable<Error>;
+  ): Promise<RXMessage<I, O>>;
 }

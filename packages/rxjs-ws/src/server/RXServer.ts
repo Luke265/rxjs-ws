@@ -1,17 +1,19 @@
 import { Subject, merge, firstValueFrom } from 'rxjs';
-import { RXSocket, RXSocketSender } from '../RXSocket.js';
-import { RXSocketMessage } from '../RXSocketMessage.js';
-import { RXServerSocketEvent } from './RXServerSocketEvent.js';
-import { RXServerSocketClient } from './RXSocketServerClient.js';
-import { IncomingMessage } from 'http';
+import { RXServerEvent } from './RXServerEvent.js';
+import { RXServerClient } from './RXServerClient.js';
 import WebSocket from 'ws';
-import { EventName, SUBSCRIBTION_EVENT_NAME } from '../RXSocketEvent.js';
-import { RXServerSocketEventImpl } from './RXServerSocketEventImpl.js';
+import {
+  EventName,
+  RXEvent,
+  SUBSCRIBTION_EVENT_NAME,
+} from '../RXSocketEvent.js';
+import { RXServerEventImpl } from './RXServerEventImpl.js';
+import { RXServerClientMessage } from './RXServerClientMessage.js';
 
-export class RXSocketServer implements RXSocketSender {
-  readonly message$: Subject<RXSocketMessage<any, any>> = new Subject();
-  readonly connection$: Subject<RXSocket> = new Subject();
-  readonly sockets: RXServerSocketClient[] = [];
+export class RXServer {
+  readonly message$: Subject<RXServerClientMessage<any, any>> = new Subject();
+  readonly connection$: Subject<RXServerClient> = new Subject();
+  readonly sockets: RXServerClient[] = [];
   readonly readyState = WebSocket.OPEN;
   private readonly _close$ = new Subject<void>();
   private readonly _open$ = new Subject<void>();
@@ -23,12 +25,11 @@ export class RXSocketServer implements RXSocketSender {
   readonly error$ = this._error$.asObservable();
   readonly listening$ = this._listening$.asObservable();
 
-  private readonly events: { [name: string]: RXServerSocketEventImpl<any> } =
-    {};
+  private readonly events: { [name: string]: RXServerEventImpl<any> } = {};
   private server?: WebSocket.Server | null = null;
   private heartbeatTimer: NodeJS.Timer | null = null;
 
-  constructor(public options: WebSocket.ServerOptions = {}) {}
+  constructor(private readonly options: WebSocket.ServerOptions = {}) {}
 
   listen() {
     if (this.server) {
@@ -36,13 +37,13 @@ export class RXSocketServer implements RXSocketSender {
     }
     this.server = new WebSocket.Server(this.options);
     this.server.on('connection', (webSocket, request) => {
-      const socket = this.wrapSocket(webSocket, request);
+      const socket = new RXServerClient(webSocket, request);
       socket
         .event<[string, boolean]>(SUBSCRIBTION_EVENT_NAME)
-        .subscribe((message) => {
-          this.toggleSub(socket, message.data[0], message.data[1]);
-        });
-      socket.message$.subscribe((message: RXSocketMessage<any, any>) => {
+        .subscribe((message) =>
+          this.toggleSub(socket, message.data[0], message.data[1])
+        );
+      socket.message$.subscribe((message) => {
         const event = this.events[message.event.name];
         if (event) {
           event.next(message);
@@ -66,41 +67,45 @@ export class RXSocketServer implements RXSocketSender {
     this.server.on('close', () => this._close$.next());
     this.server.on('error', (error: Error) => this._error$.next(error));
     this.heartbeatTimer = setInterval(
-      this.sendRaw.bind(this, this.serialize(0, 0)),
+      this.broadcastRaw.bind(this, this.serialize(0, 0)),
       50_000
     );
     return firstValueFrom(merge(this.listening$, this.close$, this.error$));
   }
 
-  close() {
-    if (!this.server) {
-      return;
+  close(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      if (!this.server) {
+        resolve();
+        return;
+      }
+      clearInterval(this.heartbeatTimer ?? undefined);
+      for (const s of this.sockets) {
+        try {
+          s.close();
+        } catch (e) {
+          /** ignore */
+        }
+      }
+      this.server.close((e) => (e ? reject(e) : resolve()));
+      this.server = undefined;
+    });
+  }
+
+  event<I = any, O = any>(name: EventName | RXEvent): RXServerEvent<I, O> {
+    if (typeof name === 'object' && 'name' in name) {
+      name = name.name;
     }
-    clearInterval(this.heartbeatTimer ?? undefined);
-    this.server.close();
-    this.server = undefined;
-  }
-
-  event<I = any, O = any>(event: EventName): RXServerSocketEvent<I, O> {
-    return (this.events[event] ??= new RXServerSocketEventImpl(this, event));
-  }
-
-  protected wrapSocket(socket: WebSocket, request: IncomingMessage) {
-    return new RXServerSocketClient(socket, request);
+    return (this.events[name] ??= new RXServerEventImpl(this, name));
   }
 
   protected serialize(id: number, event: EventName, data?: any) {
     return JSON.stringify([id, event, data]);
   }
 
-  protected deserialize(data: any) {
-    return JSON.parse(data);
-  }
-
-  public async send(event: EventName, data?: any) {
+  public async broadcast(event: EventName, data?: any) {
     const subs = this.event(event).remoteSubscribers;
     if (subs.size === 0) {
-      return;
       return;
     }
     data = this.serialize(0, event, data);
@@ -109,25 +114,18 @@ export class RXSocketServer implements RXSocketSender {
     }
   }
 
-  public sendForResult<I, O>(
-    event: EventName,
-    data: any
-  ): Promise<RXSocketMessage<I, O>> {
-    throw new Error('Cannot send for result');
-  }
-
-  public async sendRaw(data: any) {
-    for (const socket of this.sockets) {
-      socket.sendRaw(data);
-    }
+  public async broadcastRaw(data: any) {
+    return Promise.allSettled(this.sockets.map((s) => s.sendRaw(data)));
   }
 
   private toggleSub(
-    socket: RXServerSocketClient,
+    socket: RXServerClient,
     name: string,
     subscribing: boolean
   ) {
-    socket.event(name).toggleRemoteSub(socket, subscribing);
-    this.event(name).toggleRemoteSub(socket, subscribing);
+    (this.event(name) as RXServerEventImpl).toggleRemoteSub(
+      socket,
+      subscribing
+    );
   }
 }

@@ -1,23 +1,23 @@
-import { firstValueFrom, lastValueFrom, take, tap } from 'rxjs';
-import { RXSocketClient } from '../src/client/RXSocketClient';
-import { RXSocketServer } from '../src/server/RXSocketServer';
+import { take, firstValueFrom, lastValueFrom, tap } from 'rxjs';
+import { RXClient } from '../src/client/RXClient';
+import { RXServer } from '../src/server/RXServer';
 import { WebSocket } from 'ws';
 
-let server: RXSocketServer;
-let client: RXSocketClient;
-beforeAll(async () => {
-  server = new RXSocketServer({
+let server: RXServer;
+let client: RXClient;
+
+jest.setTimeout(5000);
+
+beforeEach(async () => {
+  server = new RXServer({
     port: 9999,
     host: 'localhost',
   });
   await server.listen();
 });
-afterAll(() => {
-  server?.close();
-});
 
 it('nothing', async () => {
-  client = new RXSocketClient({
+  client = new RXClient({
     url: 'ws://localhost:9999',
   });
   await client.open();
@@ -25,10 +25,31 @@ it('nothing', async () => {
   expect(client.readyState).toBe(WebSocket.CLOSED);
 });
 
+it('Must have send and sendForResult', () => {
+  expect(server.event('sample')).toHaveProperty('send');
+  expect(server.event('sample')).not.toHaveProperty('sendForResult');
+  server.event('sample').subscribe((evt) => {
+    expect(evt).toHaveProperty('send');
+    expect(evt).toHaveProperty('sendForResult');
+    evt.send;
+    evt.sendForResult;
+  });
+
+  client.event('sample').send;
+  client.event('sample').sendForResult;
+  client.event('sample').subscribe((evt) => {
+    expect(evt).toHaveProperty('send');
+    expect(evt).toHaveProperty('sendForResult');
+    evt.send;
+    evt.sendForResult;
+  });
+});
+
 describe('messaging', () => {
   beforeEach(async () => {
-    client = new RXSocketClient({
+    client = new RXClient({
       url: 'ws://localhost:9999',
+      queueLength: 100,
       reconnectDelay: 0,
     });
     await client.open();
@@ -40,11 +61,11 @@ describe('messaging', () => {
 
   it('should', async () => {
     server
-      .event('test2')
+      .event('test0')
       .remoteSubscribe$.pipe(take(1))
       .subscribe((socket) => socket.send('ok'));
     expect(client.readyState).toBe(WebSocket.OPEN);
-    await expect(firstValueFrom(client.event('test2'))).resolves.toHaveProperty(
+    await expect(firstValueFrom(client.event('test0'))).resolves.toHaveProperty(
       'data',
       'ok'
     );
@@ -55,12 +76,12 @@ describe('messaging', () => {
     const clientEvent = lastValueFrom(
       client.event('test2').pipe(
         tap((e) => e.send('ok2')),
-        take(1)
+        take(100)
       )
     );
     const serverSocket = await firstValueFrom(serverEvent.remoteSubscribe$);
     const responses: Promise<any>[] = [];
-    for (let i = 0; i < 1; i++) {
+    for (let i = 0; i < 100; i++) {
       responses.push(
         serverSocket.socket
           .event<string>('test2')
@@ -73,4 +94,37 @@ describe('messaging', () => {
     expect(re.every((r) => r === 'ok2')).toBeTruthy();
     expect(ce).toHaveProperty('data', 'val2');
   });
+
+  it('Response timeout', async () => {
+    const serverEvent = server.event('test3');
+    const serverSocketPromise = firstValueFrom(serverEvent.remoteSubscribe$);
+    client.event('test3').subscribe(() => {
+      // event received but not going to send response
+    });
+    const serverSocket = await serverSocketPromise;
+    await expect(
+      serverSocket.socket
+        .event<string>('test3')
+        .sendForResult('val2', { timeout: 100 })
+    ).rejects.toThrow('Response timeout');
+  });
+
+  it('Server closed', async () => {
+    const serverEvent = server.event('test3');
+    const serverSocketPromise = firstValueFrom(serverEvent.remoteSubscribe$);
+    client.event('test3').subscribe(async () => {
+      // event received but server closed
+      await server.close();
+    });
+    const serverSocket = await serverSocketPromise;
+    await expect(
+      serverSocket.socket
+        .event<string>('test3')
+        .sendForResult('val2', { timeout: 1000 })
+    ).rejects.toThrow('closed');
+  });
+});
+
+afterEach(async () => {
+  await server?.close();
 });

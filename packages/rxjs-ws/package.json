@@ -50,6 +50,16 @@
           "build"
         ],
         "command": "tsc --project packages/rxjs-ws/tsconfig.lib.json --emitDeclarationOnly --outDir packages/rxjs-ws/dist"
+      },
+      "test": {
+        "dependsOn": [
+          "test-prep"
+        ],
+        "executor": "@nx/jest:jest",
+        "options": {
+          "jestConfig": "packages/rxjs-ws/jest.config.ts",
+          "passWithNoTests": true
+        }
       }
     }
   }

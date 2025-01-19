@@ -1,3 +1,4 @@
-export * from './RXClientSocketEvent.js';
-export * from './RXSocketClient.js';
-export * from './RXSocketClientOptions.js';
+export * from './RXClientEvent.js';
+export * from './RXClient.js';
+export * from './RXClientMessage.js';
+export * from './RXClientOptions.js';
