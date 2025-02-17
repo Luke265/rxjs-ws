@@ -41,7 +41,7 @@ export class RXServer {
       socket
         .event<[string, boolean]>(SUBSCRIBTION_EVENT_NAME)
         .subscribe((message) =>
-          this.toggleSub(socket, message.data[0], message.data[1])
+          this.toggleSub(socket, message.data[0], message.data[1]),
         );
       socket.message$.subscribe((message) => {
         const event = this.events[message.event.name];
@@ -68,7 +68,7 @@ export class RXServer {
     this.server.on('error', (error: Error) => this._error$.next(error));
     this.heartbeatTimer = setInterval(
       this.broadcastRaw.bind(this, this.serialize(0, 0)),
-      50_000
+      50_000,
     );
     return firstValueFrom(merge(this.listening$, this.close$, this.error$));
   }
@@ -121,11 +121,11 @@ export class RXServer {
   private toggleSub(
     socket: RXServerClient,
     name: string,
-    subscribing: boolean
+    subscribing: boolean,
   ) {
     (this.event(name) as RXServerEventImpl).toggleRemoteSub(
       socket,
-      subscribing
+      subscribing,
     );
   }
 }

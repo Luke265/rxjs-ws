@@ -10,7 +10,7 @@ export class RXServerClientEventImpl<I = any, O = any>
 {
   constructor(
     protected readonly sender: RXServerClient,
-    public readonly name: EventName
+    public readonly name: EventName,
   ) {
     super();
   }
@@ -21,7 +21,7 @@ export class RXServerClientEventImpl<I = any, O = any>
 
   sendForResult<I2 = I, O2 = O>(
     data: O2,
-    options?: any
+    options?: any,
   ): Promise<RXServerClientMessage<I2, O2>> {
     return this.sender.sendForResult(this.name, data, options);
   }

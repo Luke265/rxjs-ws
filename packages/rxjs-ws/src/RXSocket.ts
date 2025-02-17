@@ -22,6 +22,6 @@ export interface RXSocket {
   sendForResult<I, O>(
     event: EventName,
     data: any,
-    options?: SendForResultOptions
+    options?: SendForResultOptions,
   ): Promise<RXMessage<I, O>>;
 }

@@ -77,7 +77,7 @@ export class RXClient implements RXSocket {
   sendForResult<I, O>(
     event: EventName,
     data: I,
-    options?: SendForResultOptions
+    options?: SendForResultOptions,
   ): Promise<RXClientMessage<O, unknown>> {
     return this.transport.sendForResult(event, data, options);
   }
@@ -128,7 +128,7 @@ export class RXClient implements RXSocket {
         this.open().catch(() => {
           /** ignore */
         }),
-      this.reconnectDelay
+      this.reconnectDelay,
     );
   }
 }

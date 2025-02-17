@@ -17,7 +17,7 @@ export class RXServerEventImpl<I = any, O = any>
 
   constructor(
     protected readonly sender: RXServer,
-    public readonly name: EventName
+    public readonly name: EventName,
   ) {
     super();
   }

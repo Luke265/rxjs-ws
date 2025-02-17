@@ -14,7 +14,7 @@ export class RXClientEventImpl<I = any, O = any>
 
   constructor(
     protected readonly sender: RXClient,
-    public readonly name: EventName
+    public readonly name: EventName,
   ) {
     super();
     // TODO: unsub somewhere?
@@ -39,7 +39,7 @@ export class RXClientEventImpl<I = any, O = any>
 
   sendForResult<K, V>(
     data?: O,
-    options?: SendForResultOptions
+    options?: SendForResultOptions,
   ): Promise<RXClientMessage<K, V>> {
     return this.sender.sendForResult(this.name, data, options);
   }

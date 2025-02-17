@@ -7,6 +7,6 @@ export interface RXServerClientMessage<I, O = unknown> extends RXMessage<I, O> {
   readonly socket: RXServerClient;
   sendForResult<I2 = I, O2 = O>(
     data: O2,
-    options?: any
+    options?: any,
   ): Promise<RXServerClientMessage<I2, O2>>;
 }

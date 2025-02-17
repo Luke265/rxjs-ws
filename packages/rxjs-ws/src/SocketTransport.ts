@@ -11,9 +11,9 @@ declare type ResponseHandler = [
   date: number,
   timeout: number,
   resolve: (
-    value: RXMessage<any, any> | PromiseLike<RXMessage<any, any>>
+    value: RXMessage<any, any> | PromiseLike<RXMessage<any, any>>,
   ) => void,
-  reject: (reason: unknown) => void
+  reject: (reason: unknown) => void,
 ];
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -26,7 +26,7 @@ export interface SocketTransportOptions {
 
 export class SocketTransport<
   E extends TrackedObservable<M> & RXEvent<any, any>,
-  M extends RXMessage<any, any>
+  M extends RXMessage<any, any>,
 > {
   static EVENT_RESPONSE = -1;
 
@@ -48,7 +48,7 @@ export class SocketTransport<
 
   constructor(
     private readonly socket: RXSocket,
-    options?: SocketTransportOptions
+    options?: SocketTransportOptions,
   ) {
     this.responseTimeout = options?.responseTimeout ?? 10_000;
     this.queueTimeout = options?.queueTimeout ?? this.responseTimeout;
@@ -77,7 +77,7 @@ export class SocketTransport<
     event: EventName,
     data: I,
     options?: SendForResultOptions,
-    id = this.messageId++
+    id = this.messageId++,
   ): Promise<any> {
     const stackError = new Error();
     return new Promise<RXMessage<O, unknown>>((resolve, reject) => {
@@ -157,7 +157,7 @@ export class SocketTransport<
             handler[3](new Error('Response timeout'));
           }
         }
-      }, 1000)
+      }, 1000),
     );
   }
 
@@ -209,7 +209,7 @@ export class SocketTransport<
           }
           sent = true;
           return this.sendRaw(
-            this.serialize(id, SocketTransport.EVENT_RESPONSE, data)
+            this.serialize(id, SocketTransport.EVENT_RESPONSE, data),
           );
         },
         sendForResult: (data: any, options?: SendForResultOptions) => {
@@ -221,7 +221,7 @@ export class SocketTransport<
             SocketTransport.EVENT_RESPONSE,
             data,
             options,
-            id
+            id,
           );
         },
       } as unknown as M;

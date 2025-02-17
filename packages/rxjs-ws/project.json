@@ -1,45 +1,36 @@
 {
-
-    "name": "rxjs-ws",
-    "$schema": "../../node_modules/nx/schemas/project-schema.json",
-    "sourceRoot": "packages/rxjs-ws/src",
-    "projectType": "library",
-    "targets": {
-        "build": {
-        "executor": "@nx/esbuild:esbuild",
-        "outputs": [
-            "{options.outputPath}"
+  "name": "rxjs-ws",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/rxjs-ws/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/esbuild:esbuild",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "packages/rxjs-ws/dist",
+        "main": "packages/rxjs-ws/src/index.ts",
+        "additionalEntryPoints": [
+          "packages/rxjs-ws/src/client/index.ts",
+          "packages/rxjs-ws/src/server/index.ts"
         ],
-        "options": {
-            "outputPath": "packages/rxjs-ws/dist",
-            "main": "packages/rxjs-ws/src/index.ts",
-            "additionalEntryPoints": [
-            "packages/rxjs-ws/src/client/index.ts",
-            "packages/rxjs-ws/src/server/index.ts"
-            ],
-            "tsConfig": "packages/rxjs-ws/tsconfig.lib.json",
-            "format": [
-            "esm"
-            ],
-            "bundle": false,
-            "declarationRootDir": "packages/rxjs-ws/src"
-        }
-        },
-        "build-release": {
-        "dependsOn": [
-            "build"
-        ],
-        "command": "tsc --project packages/rxjs-ws/tsconfig.lib.json --emitDeclarationOnly --outDir packages/rxjs-ws/dist"
-        },
-        "test": {
-        "dependsOn": [
-            "test-prep"
-        ],
-        "executor": "@nx/jest:jest",
-        "options": {
-            "jestConfig": "packages/rxjs-ws/jest.config.ts",
-            "passWithNoTests": true
-        }
-        }
+        "tsConfig": "packages/rxjs-ws/tsconfig.lib.json",
+        "format": ["esm"],
+        "bundle": false,
+        "declarationRootDir": "packages/rxjs-ws/src"
+      }
+    },
+    "build-release": {
+      "dependsOn": ["build"],
+      "command": "tsc --project packages/rxjs-ws/tsconfig.lib.json --emitDeclarationOnly --outDir packages/rxjs-ws/dist"
+    },
+    "test": {
+      "dependsOn": ["test-prep"],
+      "executor": "@nx/jest:jest",
+      "options": {
+        "jestConfig": "packages/rxjs-ws/jest.config.ts",
+        "passWithNoTests": true
+      }
     }
+  }
 }

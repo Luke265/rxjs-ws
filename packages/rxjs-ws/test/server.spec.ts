@@ -61,7 +61,7 @@ describe('messaging', () => {
     expect(client.readyState).toBe(WebSocket.OPEN);
     await expect(firstValueFrom(client.event('test0'))).resolves.toHaveProperty(
       'data',
-      'ok'
+      'ok',
     );
   });
 
@@ -70,8 +70,8 @@ describe('messaging', () => {
     const clientEvent = lastValueFrom(
       client.event('test2').pipe(
         tap((e) => e.send('ok2')),
-        take(100)
-      )
+        take(100),
+      ),
     );
     const serverSocket = await firstValueFrom(serverEvent.remoteSubscribe$);
     const responses: Promise<any>[] = [];
@@ -80,7 +80,7 @@ describe('messaging', () => {
         serverSocket.socket
           .event<string>('test2')
           .sendForResult('val2', { timeout: 100 })
-          .then((r) => r.data)
+          .then((r) => r.data),
       );
     }
     const re = await Promise.all(responses);
@@ -99,7 +99,7 @@ describe('messaging', () => {
     await expect(
       serverSocket.socket
         .event<string>('test3')
-        .sendForResult('val2', { timeout: 100 })
+        .sendForResult('val2', { timeout: 100 }),
     ).rejects.toThrow('Response timeout');
   });
 
@@ -114,7 +114,7 @@ describe('messaging', () => {
     await expect(
       serverSocket.socket
         .event<string>('test3')
-        .sendForResult('val2', { timeout: 1000 })
+        .sendForResult('val2', { timeout: 1000 }),
     ).rejects.toThrow('closed');
   });
 
@@ -123,7 +123,7 @@ describe('messaging', () => {
       msg.send('my response');
     });
     await expect(
-      client.sendForResult('test4', {}, { timeout: 1000 })
+      client.sendForResult('test4', {}, { timeout: 1000 }),
     ).resolves.toHaveProperty('data', 'my response');
   });
 

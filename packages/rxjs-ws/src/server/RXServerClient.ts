@@ -20,7 +20,7 @@ export class RXServerClient implements RXSocket {
 
   constructor(
     public readonly raw: WebSocket,
-    public readonly request: IncomingMessage
+    public readonly request: IncomingMessage,
   ) {
     this.transport = new SocketTransport<
       RXServerClientEventImpl,
@@ -51,7 +51,7 @@ export class RXServerClient implements RXSocket {
   sendForResult<I, O>(
     event: EventName,
     data: any,
-    options?: SendForResultOptions
+    options?: SendForResultOptions,
   ): Promise<RXServerClientMessage<I, O>> {
     return this.transport.sendForResult(event, data, options) as any;
   }
@@ -63,7 +63,7 @@ export class RXServerClient implements RXSocket {
     // we cannot be sure if output or input shape is valid
     return (this.transport.events[name] ??= new RXServerClientEventImpl(
       this,
-      name
+      name,
     ));
   }
 

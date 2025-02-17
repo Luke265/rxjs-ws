@@ -9,6 +9,6 @@ export interface RXMessage<I, O = unknown> {
   send(data: O): Promise<void>;
   sendForResult<I2 = I, O2 = O>(
     data: O2,
-    options?: any
+    options?: any,
   ): Promise<RXMessage<I2, O2>>;
 }

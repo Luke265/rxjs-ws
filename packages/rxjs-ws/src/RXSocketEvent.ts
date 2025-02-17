@@ -6,7 +6,7 @@ export type EventName = string | number;
 export interface RXEvent<
   I = any,
   O = any,
-  M extends RXMessage<I, O> = RXMessage<I, O>
+  M extends RXMessage<I, O> = RXMessage<I, O>,
 > extends Observable<M> {
   readonly name: EventName;
 

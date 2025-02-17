@@ -6,6 +6,6 @@ export interface RXClientEvent<I = any, O = any>
   extends RXEvent<I, O, RXClientMessage<I, O>> {
   sendForResult<K, V>(
     data?: O,
-    options?: SendForResultOptions
+    options?: SendForResultOptions,
   ): Promise<RXClientMessage<K, V>>;
 }
