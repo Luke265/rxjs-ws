@@ -126,6 +126,14 @@ describe('messaging', () => {
       client.sendForResult('test4', {}, { timeout: 1000 })
     ).resolves.toHaveProperty('data', 'my response');
   });
+
+  it('should', async () => {
+    const socket = server.sockets[0];
+    const promise = firstValueFrom(socket.close$);
+    await client.close();
+    await expect(promise).resolves.toBeTruthy();
+    expect(server.sockets).toHaveLength(0);
+  });
 });
 
 afterEach(async () => {

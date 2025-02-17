@@ -107,8 +107,8 @@ export class RXClient implements RXSocket {
       return;
     }
     this.reconnect = false;
-    const p = firstValueFrom(this.close$);
-    this.socket?.close(code, data);
+    const p = firstValueFrom(this.close$.pipe(timeout(1000)));
+    this.socket.close(code, data);
     return p;
   }
 

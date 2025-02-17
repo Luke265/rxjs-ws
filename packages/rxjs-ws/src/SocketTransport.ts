@@ -64,7 +64,7 @@ export class SocketTransport<
       if (this.queueTimeout > 0) {
         await firstValueFrom(this.open$.pipe(timeout(this.queueTimeout)));
         if ((this.socket.readyState as ReadyState) === ReadyState.OPEN) {
-          this.sendRaw(data);
+          await this.sendRaw(data);
           return;
         }
       }
@@ -79,6 +79,7 @@ export class SocketTransport<
     options?: SendForResultOptions,
     id = this.messageId++
   ): Promise<any> {
+    const stackError = new Error();
     return new Promise<RXMessage<O, unknown>>((resolve, reject) => {
       if (this.response.has(id)) {
         throw new Error('Callback already set');
@@ -86,14 +87,20 @@ export class SocketTransport<
       if (this.response.size > this.queueLength) {
         throw new Error('Full queue');
       }
+      const rejectWrap = (e: unknown) => {
+        this.response.delete(id);
+        stackError.message = '' + e;
+        stackError.cause = e;
+        reject(stackError);
+      };
       this.response.set(id, [
         Date.now(),
         options?.timeout ?? this.responseTimeout,
         resolve,
-        reject,
+        rejectWrap,
       ]);
-      this.sendRaw(this.serialize(id, event, data));
       this.setupCleanup();
+      this.sendRaw(this.serialize(id, event, data)).catch(rejectWrap);
     });
   }
 
@@ -121,17 +128,20 @@ export class SocketTransport<
     return JSON.parse(data);
   }
 
-  async destroy() {
+  destroy() {
     clearInterval(this.cleanupTimer ?? undefined);
     this.cleanupTimer = null;
     this.rejectAll('closed');
-    for (const name in this.events) {
-      this.events[name].complete();
-    }
-    this.open$.complete();
-    this.close$.complete();
-    this.error$.complete();
-    this.message$.complete();
+    // must be completed outside rxjs stack
+    queueMicrotask(() => {
+      for (const name in this.events) {
+        this.events[name].complete();
+      }
+      this.open$.complete();
+      this.close$.complete();
+      this.error$.complete();
+      this.message$.complete();
+    });
   }
 
   private setupCleanup() {
@@ -142,10 +152,9 @@ export class SocketTransport<
     this.cleanupTimer = Number(
       setInterval(() => {
         const now = Date.now();
-        for (const [id, handler] of this.response) {
+        for (const [_, handler] of this.response) {
           if (handler && now - handler[0] >= handler[1]) {
             handler[3](new Error('Response timeout'));
-            this.response.delete(id);
           }
         }
       }, 1000)

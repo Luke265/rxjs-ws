@@ -50,7 +50,7 @@ export class RXServer {
         }
         this.message$.next(message);
       });
-      socket.close$.subscribe(async () => {
+      socket.close$.subscribe(() => {
         const idx = this.sockets.indexOf(socket);
         if (idx !== -1) {
           this.sockets.splice(idx, 1);
@@ -58,7 +58,7 @@ export class RXServer {
         for (const p in this.events) {
           this.toggleSub(socket, p, false);
         }
-        await socket.destroy();
+        socket.destroy();
       });
       this.sockets.push(socket);
       this.connection$.next(socket);
