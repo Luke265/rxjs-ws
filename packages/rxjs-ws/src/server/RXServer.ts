@@ -27,7 +27,7 @@ export class RXServer {
 
   private readonly events: { [name: string]: RXServerEventImpl<any> } = {};
   private server?: WebSocket.Server | null = null;
-  private heartbeatTimer: NodeJS.Timer | null = null;
+  private heartbeatTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly options: WebSocket.ServerOptions = {}) {}
 
