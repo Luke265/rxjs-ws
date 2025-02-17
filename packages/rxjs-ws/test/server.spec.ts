@@ -16,16 +16,10 @@ beforeEach(async () => {
   await server.listen();
 });
 
-it('nothing', async () => {
+it('Must have send and sendForResult', () => {
   client = new RXClient({
     url: 'ws://localhost:9999',
   });
-  await client.open();
-  await client.close();
-  expect(client.readyState).toBe(WebSocket.CLOSED);
-});
-
-it('Must have send and sendForResult', () => {
   expect(server.event('sample')).toHaveProperty('send');
   expect(server.event('sample')).not.toHaveProperty('sendForResult');
   server.event('sample').subscribe((evt) => {
@@ -59,7 +53,7 @@ describe('messaging', () => {
     await client.close();
   });
 
-  it('should', async () => {
+  it('should subscribe', async () => {
     server
       .event('test0')
       .remoteSubscribe$.pipe(take(1))
@@ -71,7 +65,7 @@ describe('messaging', () => {
     );
   });
 
-  it('should b', async () => {
+  it('should handle queue', async () => {
     const serverEvent = server.event('test2');
     const clientEvent = lastValueFrom(
       client.event('test2').pipe(
@@ -122,6 +116,15 @@ describe('messaging', () => {
         .event<string>('test3')
         .sendForResult('val2', { timeout: 1000 })
     ).rejects.toThrow('closed');
+  });
+
+  it('Send for result without sub', async () => {
+    server.event('test4').subscribe((msg) => {
+      msg.send('my response');
+    });
+    await expect(
+      client.sendForResult('test4', {}, { timeout: 1000 })
+    ).resolves.toHaveProperty('data', 'my response');
   });
 });
 

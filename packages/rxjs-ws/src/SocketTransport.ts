@@ -187,10 +187,7 @@ export class SocketTransport<
         return;
       }
       const [id, eventName, data] = this.deserialize(socketEvent.data);
-      const event = this.events[eventName];
-      if (!event) {
-        return;
-      }
+      const event = this.socket.event(eventName);
       let sent = false;
       const message = {
         id,
@@ -226,7 +223,7 @@ export class SocketTransport<
           callback[2](message);
         }
       } else {
-        event.next(message);
+        (event as any).next(message);
         this.message$.next(message);
       }
     };
